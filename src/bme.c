@@ -4,9 +4,9 @@
 #include "driver/i2c.h"
 #include <bme280.h>
 
-#include "sensor.h"
+#include "bme.h"
 
-#define LOG_TAG "SENSOR"
+#define LOG_TAG "BME"
 
 #define SDA_PIN CONFIG_BME280_SDA
 #define SCL_PIN CONFIG_BME280_SCL
@@ -76,7 +76,7 @@ void user_delay_ms(uint32_t period)
     vTaskDelay(period); // divide by portTICK_PERIOD_MS returns 0 ?
 }
 
-esp_err_t init_i2c()
+void init_i2c()
 {
     int i2c_master_port = I2C_MASTER_NUM;
     i2c_config_t conf;
@@ -86,54 +86,34 @@ esp_err_t init_i2c()
     conf.scl_io_num = SCL_PIN;
     conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
     conf.master.clk_speed = 100000;
-    i2c_param_config(i2c_master_port, &conf);
-    return i2c_driver_install(i2c_master_port, conf.mode, 0, 0, 0);
+    ESP_ERROR_CHECK(i2c_param_config(i2c_master_port, &conf));
+    ESP_ERROR_CHECK(i2c_driver_install(i2c_master_port, conf.mode, 0, 0, 0));
 }
 
-esp_err_t sensor_init()
+void bme_init()
 {
-    esp_err_t ret;
-    int8_t bme_ret;
-
-    ret = init_i2c();
-    if (ret != ESP_OK)
-    {
-        ESP_LOGE(LOG_TAG, "Init I2C failed: %s", esp_err_to_name(ret));
-        return ret;
-    }
+    init_i2c();
 
     bme280.write = user_i2c_write;
     bme280.read = user_i2c_read;
     bme280.delay_ms = user_delay_ms;
     bme280.intf = BME280_I2C_INTF;
     bme280.dev_id = BME280_I2C_ADDR_PRIM;
-
-    bme_ret = bme280_init(&bme280);
-    if (bme_ret != BME280_OK)
-    {
-        ESP_LOGE(LOG_TAG, "Init BME280 failed, error code: %d", bme_ret);
-        return ESP_FAIL;
-    }
+    ESP_ERROR_CHECK(bme280_init(&bme280));
 
     bme280.settings.osr_h = BME280_OVERSAMPLING_1X;
     bme280.settings.osr_p = BME280_OVERSAMPLING_16X;
     bme280.settings.osr_t = BME280_OVERSAMPLING_2X;
     bme280.settings.filter = BME280_FILTER_COEFF_16;
     uint8_t settings_sel = BME280_OSR_PRESS_SEL | BME280_OSR_TEMP_SEL | BME280_OSR_HUM_SEL | BME280_FILTER_SEL;
+    ESP_ERROR_CHECK(bme280_set_sensor_settings(settings_sel, &bme280));
 
-    bme_ret = bme280_set_sensor_settings(settings_sel, &bme280);
-    if (bme_ret != BME280_OK)
-    {
-        ESP_LOGE(LOG_TAG, "Set BME280 settings failed, error code: %d", bme_ret);
-        return ESP_FAIL;
-    }
-
-    return ret;
+    ESP_ERROR_CHECK(bme280_set_sensor_mode(BME280_SLEEP_MODE, &bme280));
 }
 
-sensor_data_t sensor_read()
+bme_data_t bme_read()
 {
-    sensor_data_t ret;
+    bme_data_t ret;
     struct bme280_data data;
 
     ESP_ERROR_CHECK(bme280_set_sensor_mode(BME280_FORCED_MODE, &bme280));
@@ -141,13 +121,13 @@ sensor_data_t sensor_read()
     ESP_ERROR_CHECK(bme280_get_sensor_data(BME280_ALL, &data, &bme280));
     ESP_ERROR_CHECK(bme280_set_sensor_mode(BME280_SLEEP_MODE, &bme280));
 
-    ESP_LOGI(LOG_TAG, "Pressure %.2f hPa", data.pressure / 1000.0);
-    ESP_LOGI(LOG_TAG, "Temperature %.2f °C", data.temperature / 100.0);
-    ESP_LOGI(LOG_TAG, "Humidity %.2f %c", data.humidity / 1024.0, '%');
+    ret.humidity = data.humidity / 1024.0f;
+    ret.pressure = data.pressure / 1000.0f;
+    ret.temperature = data.temperature / 100.0f;
 
-    ret.humidity = data.humidity;
-    ret.pressure = data.pressure;
-    ret.temperature = data.temperature;
+    ESP_LOGD(LOG_TAG, "Pressure %.2f hPa", ret.pressure);
+    ESP_LOGD(LOG_TAG, "Temperature %.2f °C", ret.temperature);
+    ESP_LOGD(LOG_TAG, "Humidity %.2f %c", ret.humidity, '%');
 
     return ret;
 }

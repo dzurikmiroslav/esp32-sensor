@@ -1,17 +1,14 @@
 #ifndef SENSOR_H_
 #define SENSOR_H_
 
-#include <esp_system.h>
+#include <stdint.h>
 
 typedef struct
 {
-    uint32_t pressure;
-    int32_t temperature;
-    uint32_t humidity;
-} sensor_data_t;
-
-esp_err_t sensor_init();
-
-sensor_data_t sensor_read();
+   float pressure;
+   float temperature;
+   float humidity;
+   uint8_t battery;
+} __attribute__((packed)) espnow_sensor_data_t;
 
 #endif /* SENSOR_H_ */
