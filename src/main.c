@@ -102,8 +102,7 @@ void app_main()
     memcpy(bs, &espnow_data, sizeof(espnow_sensor_data_t));
     esp_now_send(station_mac, bs, sizeof(espnow_sensor_data_t));
 
-    while (!xSemaphoreTake(espnow_send_lock, portMAX_DELAY))
-        ;
+    xSemaphoreTake(espnow_send_lock, portMAX_DELAY);
 
     esp_now_deinit();
     esp_wifi_stop();
